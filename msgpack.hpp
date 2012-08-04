@@ -448,7 +448,7 @@ namespace MSGPACK_NAMESPACE__
 		ULONG,		//<! uint64
 		FLOAT,		//<! float
 		DOUBLE,		//<! double
-		RAW = 282828282,		//<! Raw bytes [fix raw, raw 16, raw 32]
+		RAW,		//<! Raw bytes [fix raw, raw 16, raw 32]
 		ARRAY,		//<! Array [fix array, array 16, array 32]
 		MAP,		//<! Map [fix map, map 16, map 32]
 		
