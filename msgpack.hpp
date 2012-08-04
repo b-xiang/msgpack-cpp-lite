@@ -162,7 +162,6 @@ namespace MSGPACK_NAMESPACE__
 		inline
 		Packer& pack(const wchar_t* item)
 		{
-			std::cout << "pack wchar" << std::endl;
 			return (item == 0) ? write(bm::MP_NULL) : pack((char*)item, wcslen(item)*sizeof(wchar_t));
 		}
 		
