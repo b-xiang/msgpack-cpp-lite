@@ -162,6 +162,7 @@ namespace MSGPACK_NAMESPACE__
 		inline
 		Packer& pack(const wchar_t* item)
 		{
+			std::cout << "pack wchar" << std::endl;
 			return (item == 0) ? write(bm::MP_NULL) : pack((char*)item, wcslen(item)*sizeof(wchar_t));
 		}
 		
@@ -1036,6 +1037,15 @@ TYPE_CAST(__ID__, __TYPE__)
 		std::istream& in_; //!< The stream we are unpacking the data from
 	};
 	
+	
+	struct unpack
+	{
+	};
+	
+	struct pack
+	{
+	};
+	
 } // namespace MSGPACK_NAMESPACE__
 
 /**
@@ -1043,7 +1053,7 @@ TYPE_CAST(__ID__, __TYPE__)
  * a Packer object.
  */
 template<typename T> inline
-MSGPACK_NAMESPACE__::Packer& operator<<(MSGPACK_NAMESPACE__::Packer& p, const T& v)
+MSGPACK_NAMESPACE__::Packer& operator<<(MSGPACK_NAMESPACE__::Packer p, const T& v)
 {
 	return p.pack(v);
 }
@@ -1056,7 +1066,7 @@ MSGPACK_NAMESPACE__::Packer& operator<<(MSGPACK_NAMESPACE__::Packer& p, const T&
  * This may throw an exception if the Unpacker runs out of input data.
  */
 template<typename T> inline
-MSGPACK_NAMESPACE__::Unpacker& operator>>(MSGPACK_NAMESPACE__::Unpacker& u, T& v)
+MSGPACK_NAMESPACE__::Unpacker& operator>>(MSGPACK_NAMESPACE__::Unpacker u, T& v)
 throw (MSGPACK_NAMESPACE__::unpack_exception)
 {
 	MSGPACK_NAMESPACE__::Object* obj = 0;
@@ -1070,6 +1080,18 @@ throw (MSGPACK_NAMESPACE__::unpack_exception)
 		throw MSGPACK_NAMESPACE__::unpack_exception("Unable to get object from stream");
 	}
 	delete obj;
+}
+
+MSGPACK_NAMESPACE__::Packer operator<<(std::ostream &os, const MSGPACK_NAMESPACE__::pack&)
+{
+	MSGPACK_NAMESPACE__::Packer p(os);
+    return p;
+}
+
+MSGPACK_NAMESPACE__::Unpacker operator>>(std::istream &is, const MSGPACK_NAMESPACE__::unpack&)
+{
+	MSGPACK_NAMESPACE__::Unpacker u(is);
+    return u;
 }
 
 /**
