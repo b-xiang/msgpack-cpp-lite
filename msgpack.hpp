@@ -30,9 +30,18 @@
 #define MSGPACK_HPP_
 
 #include <stdint.h>
+
+#include <vector>
+#include <list>
+#include <deque>
+#include <queue>
+#include <set>
+#include <map>
 #include <stack>
 #include <bitset>
 #include <cmath>
+#include <typeinfo>
+#include <locale>
 
 #ifndef MSGPACK_NAMESPACE__
 #define MSGPACK_NAMESPACE__ msgpack
@@ -109,24 +118,6 @@ namespace MSGPACK_NAMESPACE__
 		
 	} //namespace bm
 	
-}
-
-// Some forward declarations
-namespace std {
-	template<typename, typename> class vector;
-	template<typename, typename> class list;
-	template<typename, typename> class deque;
-	template<typename, typename> class queue;
-	template<typename, typename, typename> class priority_queue;
-	template<typename, typename, typename> class set;
-	template<typename, typename, typename> class multiset;
-	template<typename, typename, typename, typename> class map;
-	template<typename, typename, typename, typename> class multimap;
-}
-
-namespace MSGPACK_NAMESPACE__
-{
-	
 	/**
 	 * Packer class. Provides the functionality to serialize data
 	 * into a stream using the MessagePack binary data.
@@ -168,6 +159,13 @@ namespace MSGPACK_NAMESPACE__
 			return (item == 0) ? write(bm::MP_NULL) : pack(item, strlen(item));
 		}
 		
+		inline
+		Packer& pack(const wchar_t* item)
+		{
+			std::cout << "pack wchar" << std::endl;
+			return (item == 0) ? write(bm::MP_NULL) : pack((char*)item, wcslen(item)*sizeof(wchar_t));
+		}
+		
 		/**
 		 * Pack a boolean value
 		 * @item Value to be serialized
@@ -206,15 +204,15 @@ namespace MSGPACK_NAMESPACE__
 				}
 				else if (value <= bm::MAX_16BIT)
 				{
-					write(bm::MP_UINT16).write<short>(value);
+					write(bm::MP_UINT16).write<uint16_t>(value);
 				}
 				else if (value <= bm::MAX_32BIT)
 				{
-					write(bm::MP_UINT32).write<int>(value);
+					write(bm::MP_UINT32).write<uint32_t>(value);
 				}
 				else
 				{
-					write(bm::MP_UINT64).write<long>(value);
+					write(bm::MP_UINT64).write<uint64_t>(value);
 				}
 			}
 			else
@@ -229,15 +227,15 @@ namespace MSGPACK_NAMESPACE__
 				}
 				else if (value >= -(bm::MAX_15BIT + 1))
 				{
-					write(bm::MP_INT16).write<short>(value);
+					write(bm::MP_INT16).write<int16_t>(value);
 				}
-				else if (value >= -(long(bm::MAX_31BIT) + 1))
+				else if (value >= -(int64_t(bm::MAX_31BIT) + 1))
 				{
-					write(bm::MP_INT32).write<int>(value);
+					write(bm::MP_INT32).write<int32_t>(value);
 				}
 				else
 				{
-					write(bm::MP_INT64).write<long>(value);
+					write(bm::MP_INT64).write<int64_t>(value);
 				}
 			}
 			return *this;
@@ -264,10 +262,11 @@ namespace MSGPACK_NAMESPACE__
 		}
 		
 		
+		template<class T>
 		inline
-		Packer& pack(const std::string& value)
+		Packer& pack(const std::basic_string<T>& value)
 		{
-			return pack(value.c_str(), value.size());
+			return pack(value.c_str());
 		}
 		
 		inline
@@ -304,7 +303,6 @@ namespace MSGPACK_NAMESPACE__
 			return *this;
 		}
 		
-		
 		template<class keyT, class valT> inline
 		Packer& pack(const std::pair<const keyT, valT>& item)
 		{
@@ -335,7 +333,6 @@ namespace MSGPACK_NAMESPACE__
 		{
 			return pack(item.begin(), item.end());
 		}
-		
 		
 		template<typename T> inline
 		Packer& pack(const std::queue<T>& item)
@@ -451,7 +448,7 @@ namespace MSGPACK_NAMESPACE__
 		ULONG,		//<! uint64
 		FLOAT,		//<! float
 		DOUBLE,		//<! double
-		RAW,		//<! Raw bytes [fix raw, raw 16, raw 32]
+		RAW = 282828282,		//<! Raw bytes [fix raw, raw 16, raw 32]
 		ARRAY,		//<! Array [fix array, array 16, array 32]
 		MAP,		//<! Map [fix map, map 16, map 32]
 		
@@ -460,8 +457,21 @@ namespace MSGPACK_NAMESPACE__
 	namespace detail
 	{
 		
+		/**
+		 * This defines the primary relationship
+		 * between an object_type and the data
+		 * type that is actually handled by it
+		 */
 		template<object_type t>
 		struct type_traits {
+		};
+		
+		/**
+		 * This defines the possible casts
+		 * from a given type T to an object type.
+		 */
+		template<typename T>
+		struct type_cast {
 		};
 		
 		// Forward definition
@@ -493,6 +503,16 @@ namespace MSGPACK_NAMESPACE__
 		}
 		
 		/**
+		 * Get current object value as type T. Note that the type_cast should
+		 * be specified for this to work.
+		 */
+		template<typename T>
+		T getValue() const throw(std::bad_cast)
+		{
+			return (T) getAs<detail::type_cast<T>::id>();
+		}
+		
+		/**
 		 * Return the current Object data as the specified
 		 * type provided as a template parameter.
 		 * In case the provided type is not current Object's type
@@ -500,24 +520,24 @@ namespace MSGPACK_NAMESPACE__
 		 * method returns a reference to the inner data.
 		 */
 		template<object_type type>
-		typename detail::type_traits<type>::type& getAs() const throw(std::bad_cast)
+		typename detail::type_traits<type>::type getValue() const throw(std::bad_cast)
+		{
+			return getValue<typename detail::type_traits<type>::type>();
+		}
+		
+		template<object_type type>
+		const typename detail::ObjectImpl<type>& getAs() const throw(std::bad_cast)
 		{
 			if(type!=type_)
 				throw std::bad_cast();
 			
-			return getAs<typename detail::type_traits<type>::type>();
+			return dynamic_cast<const typename detail::ObjectImpl<type>&>(*this);
 		}
 		
-		/**
-		 * Return the current Object data as the specified type
-		 * provided as a template parameter.
-		 * Note that this method will always return a reference, as the cast
-		 * is forced to the given type.
-		 */
-		template<class T>
-		T& getAs() const
+		template<typename T>
+		const typename detail::ObjectImpl<detail::type_cast<T>::id>& getAs() const throw(std::bad_cast)
 		{
-			return *(T*)(this->get());
+			return getAs<detail::type_cast<T>::id>();
 		}
 		
 		/**
@@ -526,26 +546,18 @@ namespace MSGPACK_NAMESPACE__
 		 */
 		virtual bool isNil() const
 		{
-			return true;
+			return false;
 		}
 		
 	protected:
-		
-		/**
-		 * This method returns a pointer to the
-		 * inner data. It is overloaded in
-		 * the specific implementations.
-		 */
-		virtual void* get() const
-		{
-			return 0;
-		}
 		
 		/**
 		 * Protected constructor. This is a virtual class.
 		 * @param type Type handled by the current object instance.
 		 */
 		explicit Object(object_type type) : type_(type) {}
+		
+		Object() : type_(NIL) {}
 		
 	private:
 		const object_type type_; //!< Type of the current object
@@ -554,22 +566,6 @@ namespace MSGPACK_NAMESPACE__
 	
 	namespace detail
 	{
-		
-		/**
-		 * Nil class. Represents a nil object.
-		 */
-		class Nil: public Object
-		{
-		public:
-			
-			Nil() : Object(NIL) {} //<! Constructor
-			
-			bool isNil() const
-			{
-				// I'm the nil guy!
-				return true;
-			}
-		};
 		
 		/**
 		 * Class ObjectImpl. Internal implementation for the speific Object types
@@ -591,117 +587,76 @@ namespace MSGPACK_NAMESPACE__
 			/**
 			 * Cast operator
 			 */
-			operator T() const
+			operator const T&() const
 			{
 				return value_;
 			}
 			
 		private:
 			
-			// From Object
-			void* get() const
-			{
-				// Return own data value
-				return (void*) &value_;
-			}
-			
 			T value_; //< Instance of the data handled by the Object
 			
 		}; // ObjectImpl
 		
-	} // namespace detail
-	
-	namespace detail
-	{
+		/**
+		 * Nil class. Represents a nil object.
+		 */
+		template<>
+		class ObjectImpl<NIL>: public Object
+		{
+		public:
+			
+			ObjectImpl() : Object(NIL) {} //<! Constructor
+			
+			bool isNil() const
+			{
+				// I'm the nil guy!
+				return true;
+			}
+		};
+		
 		
 		/**
 		 * Declaration of the types correspondences with
 		 * their specific data types
 		 */
 		
-		template<>
-		struct type_traits<BOOLEAN>
-		{
-			typedef bool type;
-		};
+#define TYPE_CAST(__ID__, __TYPE__) \
+template<> \
+struct type_cast<__TYPE__> \
+{ \
+static const object_type id = __ID__;\
+};
 		
-		template<>
-		struct type_traits<CHAR>
-		{
-			typedef char type;
-		};
+#define TYPE_TRAITS(__ID__, __TYPE__) \
+template<> \
+struct type_traits<__ID__> \
+{ \
+typedef __TYPE__ type; \
+}; \
+TYPE_CAST(__ID__, __TYPE__)
 		
-		template<>
-		struct type_traits<SHORT>
-		{
-			typedef int16_t type;
-		};
+		TYPE_TRAITS(BOOLEAN, 	bool)
+		TYPE_TRAITS(CHAR,	 	char)
+		TYPE_TRAITS(SHORT, 		int16_t)
+		TYPE_TRAITS(INTEGER,	int32_t)
+		TYPE_TRAITS(LONG, 		int64_t)
+		TYPE_TRAITS(UCHAR, 		unsigned char)
+		TYPE_TRAITS(USHORT, 	uint16_t)
+		TYPE_TRAITS(UINTEGER, 	uint32_t)
+		TYPE_TRAITS(ULONG, 		uint64_t)
+		TYPE_TRAITS(FLOAT, 		float)
+		TYPE_TRAITS(DOUBLE, 	double)
 		
-		template<>
-		struct type_traits<INTEGER>
-		{
-			typedef int32_t type;
-		};
+		TYPE_TRAITS(RAW, 		unsigned char*)
+		TYPE_CAST  (RAW, 		std::vector<unsigned char>)
+		TYPE_CAST  (RAW, 		std::string) // Type cast is implemented for raw type
+		TYPE_CAST  (RAW, 		std::wstring)
 		
-		template<>
-		struct type_traits<LONG>
-		{
-			typedef int64_t type;
-		};
+		TYPE_TRAITS(ARRAY,  	std::list<Object*>)
 		
-		template<>
-		struct type_traits<UCHAR>
-		{
-			typedef unsigned char type;
-		};
-		
-		template<>
-		struct type_traits<USHORT>
-		{
-			typedef uint16_t type;
-		};
-		
-		template<>
-		struct type_traits<UINTEGER>
-		{
-			typedef uint32_t type;
-		};
-		
-		template<>
-		struct type_traits<ULONG>
-		{
-			typedef uint64_t type;
-		};
-		
-		template<>
-		struct type_traits<FLOAT>
-		{
-			typedef float type;
-		};
-		
-		template<>
-		struct type_traits<DOUBLE>
-		{
-			typedef double type;
-		};
-		
-		template<>
-		struct type_traits<RAW>
-		{
-			typedef std::string type;
-		};
-		
-		template<>
-		struct type_traits<ARRAY>
-		{
-			typedef std::list<Object*> type;
-		};
-		
-		template<>
-		struct type_traits<MAP>
-		{
-			typedef std::multimap<Object*,Object*> type;
-		};
+		typedef std::multimap<Object*,Object*> map_type;
+		TYPE_TRAITS(MAP, 		detail::map_type)
 		
 		/**
 		 * ObjectImpl class specilization for the ARRAY type.
@@ -716,7 +671,7 @@ namespace MSGPACK_NAMESPACE__
 			 * Destructor. Removes and deletes all the Objects
 			 * contained in the array.
 			 */
-			~ObjectImpl()
+			virtual ~ObjectImpl()
 			{
 				array_t::iterator it = value_.begin();;
 				while(it!=value_.end())
@@ -733,7 +688,7 @@ namespace MSGPACK_NAMESPACE__
 			/**
 			 * Cast operator
 			 */
-			operator array_t() const
+			operator const array_t&() const
 			{
 				return value_;
 			}
@@ -745,14 +700,6 @@ namespace MSGPACK_NAMESPACE__
 			void add(Object* o)
 			{
 				value_.push_back(o);
-			}
-			
-		protected:
-			
-			// From Object
-			void* get() const
-			{
-				return (void*) &value_;
 			}
 			
 		private:
@@ -772,7 +719,7 @@ namespace MSGPACK_NAMESPACE__
 			 * Destructor. Removes and deletes all the Object keys
 			 * and values contained in the map.
 			 */
-			~ObjectImpl()
+			virtual ~ObjectImpl()
 			{
 				map_t::iterator it = value_.begin();;
 				while(it!=value_.end())
@@ -789,7 +736,7 @@ namespace MSGPACK_NAMESPACE__
 			/**
 			 * Cast operator
 			 */
-			operator map_t() const
+			operator const map_t&() const
 			{
 				return value_;
 			}
@@ -801,14 +748,6 @@ namespace MSGPACK_NAMESPACE__
 			void insert(Object* key, Object* val)
 			{
 				value_.insert(map_t::value_type(key, val));
-			}
-			
-		protected:
-			
-			// From Object
-			void* get() const
-			{
-				return (void*) &value_;
 			}
 			
 		private:
@@ -831,38 +770,58 @@ namespace MSGPACK_NAMESPACE__
 			 * the current Object which will destroy it on
 			 * deletion.
 			 */
-			ObjectImpl(raw_t& value) : value_(&value), Object(RAW)
+			ObjectImpl(raw_t value, std::size_t size) : Object(RAW), value_(value), size_(size)
 			{
 			}
 			
 			/**
 			 * Destructor
 			 */
-			~ObjectImpl()
+			virtual ~ObjectImpl()
 			{
-				delete value_;
+				delete[] value_;
 			}
 			
 			/**
 			 * Cast operator
 			 */
-			operator raw_t() const
+			operator const raw_t&() const
 			{
-				return *value_;
+				return value_;
+			}
+			
+			operator std::vector<unsigned char>() const
+			{
+				std::vector<unsigned char> v;
+				std::copy(value_, value_+size_, std::back_inserter(v));
+				return v;
+			}
+			
+			operator std::wstring() const
+			{
+				std::wstring str;
+				std::copy((wchar_t*)value_, (wchar_t*)(value_+size_), std::back_inserter(str));
+				return str;
+			}
+			
+			operator std::string() const
+			{
+				std::string str((char*)value_, size_);
+				return str;
 			}
 			
 		protected:
 			
-			// From Object
-			void* get() const
-			{
-				return (void*) value_;
-			}
+			ObjectImpl() {}
+			ObjectImpl(const ObjectImpl& other) {}
+			void operator=(const ObjectImpl& other) {}
 			
 		private:
-			raw_t* value_; //!< Pointer to the instance of the buffer handled by the Object
+			raw_t value_; //!< Pointer to the instance of the buffer handled by the Object
+			std::size_t size_;
 		};
 		
+		typedef detail::ObjectImpl<NIL> Nil;
 		typedef detail::ObjectImpl<BOOLEAN> Bool;
 		typedef detail::ObjectImpl<CHAR> Char;
 		typedef detail::ObjectImpl<SHORT> Short;
@@ -877,6 +836,12 @@ namespace MSGPACK_NAMESPACE__
 		typedef detail::ObjectImpl<RAW> Raw;
 		typedef detail::ObjectImpl<ARRAY> Array;
 		typedef detail::ObjectImpl<MAP> Map;
+		
+		//! Utility struct that allows to remove the pointer part of a given type
+		template<typename T>
+		struct remove_pointer {	typedef T type; };
+		template<typename T>
+		struct remove_pointer<T*> {	typedef typename remove_pointer<T>::type type; };
 		
 	} // namespace detail
 	
@@ -910,9 +875,6 @@ namespace MSGPACK_NAMESPACE__
 		Object* unpack() throw(unpack_exception)
 		{
 			using namespace detail;
-			
-			if(in_.eof())
-				throw unpack_exception("Reached end of stream");
 			
 			unsigned char value;
 			read(value); // Read the header
@@ -980,8 +942,8 @@ namespace MSGPACK_NAMESPACE__
 					read(iVal);
 					return unpackMap(iVal);
 				case bm::MP_RAW16:
-					read(sVal);
-					return unpackRaw(sVal);
+					read(usVal);
+					return unpackRaw(usVal);
 				case bm::MP_RAW32:
 					read(iVal);
 					return unpackRaw(iVal);
@@ -1009,7 +971,7 @@ namespace MSGPACK_NAMESPACE__
 			
 			if (value <= 127) //MP_FIXNUM
 			{
-				return new detail::Int(value);
+				return new detail::Char(value);
 			}
 			else
 			{
@@ -1056,18 +1018,17 @@ namespace MSGPACK_NAMESPACE__
 			if (size < 0)
 				return 0;
 			
-			detail::type_traits<RAW>::type* data = new detail::type_traits<RAW>::type();
-			data->resize(size);
+			detail::type_traits<RAW>::type data = new detail::remove_pointer<detail::type_traits<RAW>::type>::type[size];
+			for(int i = 0;i<size;i++)
+				read(data[i]);
 			
-			in_.read(&*data->begin(), size);
-			
-			return new detail::Raw(*data);
+			return new detail::Raw(data, size);
 		}
 		
 		template<typename T> inline
 		Unpacker& read(T& ret) throw(unpack_exception)
 		{
-			if(in_.readsome((char*) &ret, sizeof(T))<sizeof(T))
+			if(in_.read((char*) &ret, sizeof(T)).eof())
 				throw unpack_exception("Reached end of stream while reading");
 			
 			return *this;
@@ -1115,54 +1076,59 @@ throw (MSGPACK_NAMESPACE__::unpack_exception)
 /**
  * Print an Object instance into the provided output stream.
  */
-std::ostream& operator<<(std::ostream& s, const MSGPACK_NAMESPACE__::Object& o)
+template<typename char_t>
+std::basic_ostream<char_t>& operator<<(std::basic_ostream<char_t>& s, const MSGPACK_NAMESPACE__::Object& o)
 {
 	using namespace MSGPACK_NAMESPACE__;
 	
-	detail::type_traits<ARRAY>::type::iterator arrayIt;
-	detail::type_traits<MAP>::type::iterator mapIt;
+	detail::type_traits<ARRAY>::type array;
+	detail::type_traits<ARRAY>::type::const_iterator arrayIt;
+	detail::type_traits<MAP>::type map;
+	detail::type_traits<MAP>::type::const_iterator mapIt;
 	
 	switch (o.getType())
 	{
 		case NIL:
 			return (s << "null");
 		case BOOLEAN:
-			return (s << (o.getAs<BOOLEAN>()? "true" : "false"));
+			return (s << (o.getValue<BOOLEAN>()? "true" : "false"));
 		case CHAR:
-			return (s << o.getAs<CHAR>());
+			return (s << (int) o.getValue<CHAR>());
 		case SHORT:
-			return (s << o.getAs<SHORT>());
+			return (s << o.getValue<SHORT>());
 		case INTEGER:
-			return (s << o.getAs<INTEGER>());
+			return (s << o.getValue<INTEGER>());
 		case LONG:
-			return (s << o.getAs<LONG>());
+			return (s << o.getValue<LONG>());
 		case UCHAR:
-			return (s << o.getAs<UCHAR>());
+			return (s << (int) o.getValue<UCHAR>());
 		case USHORT:
-			return (s << o.getAs<USHORT>());
+			return (s << o.getValue<USHORT>());
 		case UINTEGER:
-			return (s << o.getAs<UINTEGER>());
+			return (s << o.getValue<UINTEGER>());
 		case ULONG:
-			return (s << o.getAs<ULONG>());
+			return (s << o.getValue<ULONG>());
 		case FLOAT:
-			return (s << o.getAs<FLOAT>());
+			return (s << o.getValue<FLOAT>());
 		case DOUBLE:
-			return (s << o.getAs<DOUBLE>());
+			return (s << o.getValue<DOUBLE>());
 		case RAW:
-			return (s << '"' << o.getAs<RAW>() << '"');
+			return (s << '"' << o.getValue<std::basic_string<char_t> >() << '"');
 		case ARRAY:
-			arrayIt = o.getAs<ARRAY>().begin();
+			array = o.getValue<ARRAY>();
+			arrayIt = array.begin();
 			s << "array{";
-			while(++arrayIt!=o.getAs<ARRAY>().end())
+			while(++arrayIt!=array.end())
 			{
 				s << "[" << **arrayIt++ << "]";
 			}
 			s << "}";
 			break;
 		case MAP:
-			mapIt = o.getAs<MAP>().begin();
+			map = o.getValue<MAP>();
+			mapIt = map.begin();
 			s << "map{";
-			while(mapIt!=o.getAs<MAP>().end())
+			while(mapIt!=map.end())
 			{
 				s << "[" << *mapIt->first << "," << *mapIt->second << "]";
 				mapIt++;
