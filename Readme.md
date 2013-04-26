@@ -38,14 +38,14 @@ USAGE
 #include <msgpack.hpp>
 
   Two main classes are provided:
-    * msgpack::Packer: which allows to serialize data into a MessagePack binary data stream.
-    * msgpack::Unpacker: that performs the deserialization from the binary stream.
+    * msgpack_lite::Packer: which allows to serialize data into a MessagePack binary data stream.
+    * msgpack_lite::Unpacker: that performs the deserialization from the binary stream.
 
    OUTPUT DATA SERIALIZATION
 
 	In order to serialize any data, we need to declare the packer object providing the output stream object where the data will be serialized:
 
-using namespace msgpack;
+using namespace msgpack_lite;
 
 Packer packer(std::cout); 
 
@@ -56,15 +56,15 @@ int intValue = 0;
 packer << intValue;
 
 std::map<char, double> mapValue;
-map[0] = 0.0;
-map[1] = 1.1;
-map[2] = 2.2;
+mapValue[0] = 0.0;
+mapValue[1] = 1.1;
+mapValue[2] = 2.2;
 packer << mapValue;
 
   		* Using iterators to specify ranges in STL containers:
 
 std::list<int> listValue(10, 0);
-packer.pack(listValue.begin(), listValue.begin()+5);
+packer.pack(listValue.begin(), listValue.end());
 
 
 	INPUT DATA DESERIALIZATION
@@ -86,10 +86,17 @@ while(true)
   try
   {
     // Retrieve next object from the stream and display it
-    std::auto_ptr<msgpack::Object> obj(unpacker.unpack());
-    std::cout << *obj << std::endl;
+    Object* obj = unpacker.unpack();
+    if(obj)
+    {
+    	switch(obj->getType())
+    	{
+    	// Do stuff here
+    	}
+    	delete obj;
+    }
   }
-  catch(const msgpack::unpack_exception& e) // This is thrown when the stream end is reached
+  catch(const unpack_exception& e) // This is thrown when the stream end is reached
   {
     // We are done!
     break;
